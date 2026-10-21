@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "courseId": 2073,
+  "repository": "LearningOS/2026a-rcore-BennyEmilyLee",
+  "user": "BennyEmilyLee",
+  "totalScore": 500,
+  "chapters": {
+    "ch3": {
+      "points": "7/7",
+      "score": 100,
+      "commit": "4ca6b8ce736441403e216b9ea3c4c5ab2ab8a743"
+    }
+  },
+  "score": 100,
+  "upload": {
+    "status": "pending",
+    "runId": "39563739522",
+    "runAttempt": "1"
+  }
+}
