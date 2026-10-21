@@ -53,6 +53,18 @@ fn get_base_i(app_id: usize) -> usize {
     APP_BASE_ADDRESS + app_id * APP_SIZE_LIMIT
 }
 
+/// Get the address range `[start, end)` reserved for app `app_id`.
+pub fn app_range(app_id: usize) -> (usize, usize) {
+    let start = get_base_i(app_id);
+    (start, start + APP_SIZE_LIMIT)
+}
+
+/// Get the address range `[start, end)` of the user stack of app `app_id`.
+pub fn user_stack_range(app_id: usize) -> (usize, usize) {
+    let start = USER_STACK[app_id].get_sp() - USER_STACK_SIZE;
+    (start, start + USER_STACK_SIZE)
+}
+
 /// Get the total number of applications.
 pub fn get_num_app() -> usize {
     extern "C" {

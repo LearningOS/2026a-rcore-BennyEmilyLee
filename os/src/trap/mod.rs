@@ -15,7 +15,9 @@
 mod context;
 
 use crate::syscall::syscall;
-use crate::task::{exit_current_and_run_next, suspend_current_and_run_next};
+use crate::task::{
+    exit_current_and_run_next, inc_current_syscall_count, suspend_current_and_run_next,
+};
 use crate::timer::set_next_trigger;
 use core::arch::global_asm;
 use riscv::register::{
@@ -53,8 +55,12 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             cx.sepc += 4;
+            let syscall_id = cx.x[17];
+            // count this invocation before dispatching, so that `sys_trace`
+            // itself is included in the statistics it reports
+            inc_current_syscall_count(syscall_id);
             // get system call return value
-            cx.x[10] = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
+            cx.x[10] = syscall(syscall_id, [cx.x[10], cx.x[11], cx.x[12]]) as usize;
         }
         Trap::Exception(Exception::StoreFault) | Trap::Exception(Exception::StorePageFault) => {
             println!("[kernel] PageFault in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.", stval, cx.sepc);
