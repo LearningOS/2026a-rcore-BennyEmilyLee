@@ -14,7 +14,9 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -133,6 +135,46 @@ impl TaskManager {
         inner.tasks[cur].change_program_brk(size)
     }
 
+    /// Map anonymous pages for the current task
+    fn mmap_current(&self, start: usize, len: usize, permission: MapPermission) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].memory_set.mmap(
+            VirtAddr(start),
+            VirtAddr(start.saturating_add(len)),
+            permission,
+        )
+    }
+
+    /// Unmap pages from the current task
+    fn munmap_current(&self, start: usize, len: usize) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur]
+            .memory_set
+            .munmap(VirtAddr(start), VirtAddr(start.saturating_add(len)))
+    }
+
+    /// Bump the syscall counter for the current task
+    fn inc_current_syscall_count(&self, syscall_id: usize) {
+        if syscall_id >= MAX_SYSCALL_NUM {
+            return;
+        }
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].syscall_count[syscall_id] += 1;
+    }
+
+    /// Read the syscall counter for the current task
+    fn get_current_syscall_count(&self, syscall_id: usize) -> usize {
+        if syscall_id >= MAX_SYSCALL_NUM {
+            return 0;
+        }
+        let inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].syscall_count[syscall_id] as usize
+    }
+
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
     fn run_next_task(&self) {
@@ -201,4 +243,24 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Map anonymous pages for the current 'Running' task
+pub fn mmap_current(start: usize, len: usize, permission: MapPermission) -> bool {
+    TASK_MANAGER.mmap_current(start, len, permission)
+}
+
+/// Unmap pages from the current 'Running' task
+pub fn munmap_current(start: usize, len: usize) -> bool {
+    TASK_MANAGER.munmap_current(start, len)
+}
+
+/// Increment the syscall counter of the current 'Running' task
+pub fn inc_current_syscall_count(syscall_id: usize) {
+    TASK_MANAGER.inc_current_syscall_count(syscall_id)
+}
+
+/// Query the syscall counter of the current 'Running' task
+pub fn get_current_syscall_count(syscall_id: usize) -> usize {
+    TASK_MANAGER.get_current_syscall_count(syscall_id)
 }

@@ -262,6 +262,44 @@ impl MemorySet {
             false
         }
     }
+
+    /// Map anonymous physical pages to `[start_va, end_va)` with the given permission.
+    ///
+    /// Returns `true` on success, `false` if any page in the range is already mapped
+    /// or if the frame allocator cannot supply enough frames.
+    pub fn mmap(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
+        let start_vpn = start_va.floor();
+        let end_vpn = end_va.ceil();
+        // refuse if any page in the range is already mapped
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            if let Some(pte) = self.translate(vpn) {
+                if pte.is_valid() {
+                    return false;
+                }
+            }
+        }
+        // allocate a new framed area (MapArea holds the FrameTrackers so frames stay live)
+        self.insert_framed_area(start_va, end_va, permission);
+        true
+    }
+
+    /// Unmap the pages in `[start_va, end_va)`.
+    ///
+    /// Returns `true` only if every page in the range was mapped; otherwise no pages
+    /// are unmapped and the caller is expected to leave state unchanged.
+    pub fn munmap(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let start_vpn = start_va.floor();
+        let end_vpn = end_va.ceil();
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            if !self.translate(vpn).map(|pte| pte.is_valid()).unwrap_or(false) {
+                return false;
+            }
+        }
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            self.page_table.unmap(vpn);
+        }
+        true
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
