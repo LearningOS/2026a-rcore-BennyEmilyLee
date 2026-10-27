@@ -109,7 +109,7 @@ impl EasyFileSystem {
         // acquire efs lock temporarily
         let (block_id, block_offset) = efs.lock().get_disk_inode_pos(0);
         // release efs lock
-        Inode::new(block_id, block_offset, Arc::clone(efs), block_device)
+        Inode::new(block_id, block_offset, 0, Arc::clone(efs), block_device)
     }
     /// Get inode by id
     pub fn get_disk_inode_pos(&self, inode_id: u32) -> (u32, usize) {
@@ -136,16 +136,35 @@ impl EasyFileSystem {
     }
     /// Deallocate a data block
     pub fn dealloc_data(&mut self, block_id: u32) {
-        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
-            .lock()
-            .modify(0, |data_block: &mut DataBlock| {
-                data_block.iter_mut().for_each(|p| {
-                    *p = 0;
-                })
-            });
+        // Only release the bit. Zeroing the block here would dirty a full data
+        // block and force a device write for contents nobody can observe: reads
+        // are bounded by the inode size, and the next allocation overwrites the
+        // part it uses. On a host that syncs on every guest block write this
+        // doubles the I/O of a create+write+unlink workload.
         self.data_bitmap.dealloc(
             &self.block_device,
             (block_id - self.data_area_start_block) as usize,
         )
+    }
+    /// Deallocate an inode
+    pub fn dealloc_inode(&mut self, inode_id: u32) {
+        self.inode_bitmap.dealloc(&self.block_device, inode_id as usize);
+    }
+    /// Number of inodes that can be allocated
+    pub fn inode_num(&self) -> usize {
+        self.inode_bitmap.maximum()
+    }
+    /// Find an inode id that is no longer used and is safe to hand out again.
+    ///
+    /// The inode bitmap lives in block 1 together with the first inodes. For the
+    /// inodes stored there, `dealloc` (which only touches the bitmap word) does
+    /// not clear the inode record, so the bit is already free again; using those
+    /// ids would resurrect a dirty inode. Therefore re-usable ids start from the
+    /// first inode that finds its record in an inode-only block. Ids above that
+    /// always have a zeroed record because they were never allocated.
+    pub fn first_reusable_inode_id(&self) -> u32 {
+        let inode_size = core::mem::size_of::<DiskInode>();
+        let inodes_per_block = (BLOCK_SZ / inode_size) as u32;
+        inodes_per_block
     }
 }

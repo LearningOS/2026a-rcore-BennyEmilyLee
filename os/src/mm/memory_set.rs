@@ -66,6 +66,39 @@ impl MemorySet {
             None,
         );
     }
+    /// Remove the half-open page range `[start_vpn, end_vpn)`.
+    /// Areas fully inside the range are dropped, outside ones are untouched,
+    /// and an area that only partially overlaps is shrunk (or split).
+    pub fn remove_area(&mut self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> bool {
+        let mut removed = false;
+        let mut idx = 0;
+        while idx < self.areas.len() {
+            let area_start = self.areas[idx].vpn_range.get_start();
+            let area_end = self.areas[idx].vpn_range.get_end();
+            if area_end <= start_vpn || area_start >= end_vpn {
+                idx += 1;
+                continue;
+            }
+            if area_start >= start_vpn && area_end <= end_vpn {
+                self.areas[idx].unmap(&mut self.page_table);
+                self.areas.remove(idx);
+            } else if area_start < start_vpn && area_end > end_vpn {
+                let mut tail = MapArea::from_another(&self.areas[idx]);
+                tail.shrink_to(&mut self.page_table, end_vpn);
+                self.areas[idx].shrink_to(&mut self.page_table, start_vpn);
+                self.areas.insert(idx + 1, tail);
+                idx += 2;
+            } else if area_start < start_vpn {
+                self.areas[idx].shrink_to(&mut self.page_table, start_vpn);
+                idx += 1;
+            } else {
+                self.areas[idx].shrink_to(&mut self.page_table, end_vpn);
+                idx += 1;
+            }
+            removed = true;
+        }
+        removed
+    }
     /// remove a area
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
