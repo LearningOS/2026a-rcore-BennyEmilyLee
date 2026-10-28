@@ -92,6 +92,8 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     if tid == 0 {
         add_stopping_task(task);
     } else {
+        // a non-main thread has exited: drop it from the deadlock detectors
+        process.inner_exclusive_access().deadlock.thread_finished(tid);
         drop(task);
     }
     // however, if this is the main thread of current process

@@ -5,6 +5,7 @@ use crate::task::TaskControlBlock;
 use crate::task::{block_current_and_run_next, suspend_current_and_run_next};
 use crate::task::{current_task, wakeup_task};
 use alloc::{collections::VecDeque, sync::Arc};
+use core::any::Any;
 
 /// Mutex trait
 pub trait Mutex: Sync + Send {
@@ -12,6 +13,8 @@ pub trait Mutex: Sync + Send {
     fn lock(&self);
     /// Unlock the mutex
     fn unlock(&self);
+    /// Downcast helper to inspect the concrete mutex type.
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Spinlock Mutex struct
@@ -49,6 +52,10 @@ impl Mutex for MutexSpin {
         trace!("kernel: MutexSpin::unlock");
         let mut locked = self.locked.exclusive_access();
         *locked = false;
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -101,5 +108,9 @@ impl Mutex for MutexBlocking {
         } else {
             mutex_inner.locked = false;
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

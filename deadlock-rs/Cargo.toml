@@ -1,0 +1,14 @@
+[package]
+name = "deadlock-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A no_std, OS-independent general deadlock detection library based on wait-for-graph cycle detection."
+license = "MIT"
+
+[dependencies]
+
+[features]
+default = ["std"]
+std = []
+
+[dev-dependencies]
